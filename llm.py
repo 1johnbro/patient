@@ -49,17 +49,23 @@ Return this object:
 
 Intent:
 - provider_lookup: who the providers are, or where they practice
-- book_appointment: the user needs to see, wants to see, schedule with, book with, or get an appointment with a doctor or provider
+- book_appointment: the user needs to see, wants to see, schedule with, book with, or get an appointment with a doctor or provider. Also "book", "book appointment", "schedule appointment", and "make an appointment", including obvious misspellings of appointment such as "appoinemnt" or "appoinmetnen"
 - appointment_lookup: wants an existing appointment
 - human_request: ONLY when the user explicitly asks to speak with a human, person, agent, representative, staff member, or similar
 - medical_advice: asks about symptoms, whether to wait, or for a diagnosis
-- unsupported: specialty or location outside the allowed values, or cancel, reschedule, or billing
-- unclear: the message does not independently express one of the intents above
+- unsupported: ONLY when the user clearly asks for something outside supported scheduling, such as cardiology, billing, cancellation, or rescheduling
+- unclear: the message does not independently express one of the intents above, or it is ambiguous rather than clearly unsupported
 
-A message containing only a phone number, date of birth, ZIP code, confirmation, or slot selection does not create a new standalone intent. Return intent="unclear" unless the message independently expresses one. Still extract the field they stated.
+A message containing only a phone number, date of birth, ZIP code, confirmation, slot selection, specialty, or location does not create a new standalone intent. Return intent="unclear" unless the message independently expresses one. Still extract the field they stated.
 
 "primary care", "PCP", "family doctor", and "regular doctor" are primary_care. "skin" and "dermatologist" are dermatology.
-Use null for anything the user did not say or clearly imply. Do not guess a location or ZIP code.
+Allowed specialties are only primary_care and dermatology. Allowed locations are only downtown, uptown, and lakeside.
+Tolerate obvious spelling mistakes. Map a misspelled specialty or location to one of those values only when it is unambiguous.
+"primcary care", "primay care", and "primarycare" are primary_care. "dermatolgy" and "dermatlogy" are dermatology.
+"dodnwtown", "dowtown", and "downtwon" are downtown. "lakesdie" is lakeside.
+Do NOT use intent="unsupported" for an obvious typo of a supported specialty or location.
+If a token could reasonably be more than one allowed value, use null and intent="unclear". Do not guess a location or ZIP code the user did not clearly mean.
+"lookup" by itself is unclear. It does not say whether the user wants a provider or an existing appointment.
 
 Examples:
 "My phone is 555 0101" -> {"intent":"unclear","specialty":null,"location":null,"phone":"555-0101","dob":null,"zip_code":null,"slot_number":null,"confirmed":null}
@@ -67,6 +73,21 @@ Examples:
 "I'll take the second one" -> {"intent":"unclear","specialty":null,"location":null,"phone":null,"dob":null,"zip_code":null,"slot_number":2,"confirmed":null}
 "I need to see a regular doctor downtown" -> {"intent":"book_appointment","specialty":"primary_care","location":"downtown","phone":null,"dob":null,"zip_code":null,"slot_number":null,"confirmed":null}
 "I want to speak to a person" -> {"intent":"human_request","specialty":null,"location":null,"phone":null,"dob":null,"zip_code":null,"slot_number":null,"confirmed":null}
+"book" -> {"intent":"book_appointment","specialty":null,"location":null,"phone":null,"dob":null,"zip_code":null,"slot_number":null,"confirmed":null}
+"book an appoinemnt in dodnwtown" -> {"intent":"book_appointment","specialty":null,"location":"downtown","phone":null,"dob":null,"zip_code":null,"slot_number":null,"confirmed":null}
+"schedule a dermatolgy appointment at lakeside" -> {"intent":"book_appointment","specialty":"dermatology","location":"lakeside","phone":null,"dob":null,"zip_code":null,"slot_number":null,"confirmed":null}
+"lookup" -> {"intent":"unclear","specialty":null,"location":null,"phone":null,"dob":null,"zip_code":null,"slot_number":null,"confirmed":null}
+"primcary care" -> {"intent":"unclear","specialty":"primary_care","location":null,"phone":null,"dob":null,"zip_code":null,"slot_number":null,"confirmed":null}
+"primay care" -> {"intent":"unclear","specialty":"primary_care","location":null,"phone":null,"dob":null,"zip_code":null,"slot_number":null,"confirmed":null}
+"primarycare" -> {"intent":"unclear","specialty":"primary_care","location":null,"phone":null,"dob":null,"zip_code":null,"slot_number":null,"confirmed":null}
+"dermatolgy" -> {"intent":"unclear","specialty":"dermatology","location":null,"phone":null,"dob":null,"zip_code":null,"slot_number":null,"confirmed":null}
+"dermatlogy" -> {"intent":"unclear","specialty":"dermatology","location":null,"phone":null,"dob":null,"zip_code":null,"slot_number":null,"confirmed":null}
+"dowtown" -> {"intent":"unclear","specialty":null,"location":"downtown","phone":null,"dob":null,"zip_code":null,"slot_number":null,"confirmed":null}
+"downtwon" -> {"intent":"unclear","specialty":null,"location":"downtown","phone":null,"dob":null,"zip_code":null,"slot_number":null,"confirmed":null}
+"lakesdie" -> {"intent":"unclear","specialty":null,"location":"lakeside","phone":null,"dob":null,"zip_code":null,"slot_number":null,"confirmed":null}
+"book an appointment in dowtown" -> {"intent":"book_appointment","specialty":null,"location":"downtown","phone":null,"dob":null,"zip_code":null,"slot_number":null,"confirmed":null}
+"cardiology" -> {"intent":"unsupported","specialty":null,"location":null,"phone":null,"dob":null,"zip_code":null,"slot_number":null,"confirmed":null}
+"cancel my appointment" -> {"intent":"unsupported","specialty":null,"location":null,"phone":null,"dob":null,"zip_code":null,"slot_number":null,"confirmed":null}
 phone is only a number the user stated. Keep every digit they said. Do not add or drop digits.
 dob is the date-of-birth text the user stated. Copy that text. Do not reformat it or fill in a missing year, month, or day.
 zip_code is the 5-digit ZIP the user stated. It distinguishes patients who share a name, phone, and date of birth.
