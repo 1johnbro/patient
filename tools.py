@@ -16,11 +16,16 @@ This module does NOT:
 Those responsibilities belong in the orchestrator.
 """
 
+import json
+import logging
 import os
+import time
 from typing import Any, Mapping, Optional
 from urllib.parse import quote
 
 import requests
+
+logger = logging.getLogger("scheduling.api")
 
 
 DEFAULT_BASE_URL = "http://localhost:4010"
@@ -205,53 +210,100 @@ class SchedulingClient:
         if mock_scenario:
             headers["X-Mock-Scenario"] = mock_scenario
 
+        started = time.perf_counter()
+        status = 0
+        outcome = "error"
         try:
-            response = self.session.request(
-                method=method,
-                url=self.base_url + path,
-                params=params,
-                json=json,
-                timeout=self.timeout,
-                headers=headers,
-            )
+            try:
+                response = self.session.request(
+                    method=method,
+                    url=self.base_url + path,
+                    params=params,
+                    json=json,
+                    timeout=self.timeout,
+                    headers=headers,
+                )
+            except requests.Timeout as exc:
+                outcome = "timeout"
+                raise SchedulingAPIError(
+                    0,
+                    {
+                        "code": "timeout",
+                        "message": "Scheduling API request timed out.",
+                    },
+                ) from exc
+            except requests.RequestException as exc:
+                outcome = "network_error"
+                raise SchedulingAPIError(
+                    0,
+                    {
+                        "code": "network_error",
+                        "message": "Unable to reach the scheduling API.",
+                    },
+                ) from exc
 
-        except requests.Timeout as exc:
-            raise SchedulingAPIError(
-                0,
-                {
-                    "code": "timeout",
-                    "message": "Scheduling API request timed out.",
-                },
-            ) from exc
+            status = response.status_code
+            body = _parse_json(response)
 
-        except requests.RequestException as exc:
-            raise SchedulingAPIError(
-                0,
-                {
-                    "code": "network_error",
-                    "message": "Unable to reach the scheduling API.",
-                },
-            ) from exc
+            # Treat any HTTP 2xx response as success.
+            if not 200 <= response.status_code < 300:
+                outcome = _error_code(body) or "http_error"
+                raise SchedulingAPIError(
+                    response.status_code,
+                    body,
+                )
 
-        body = _parse_json(response)
+            if not isinstance(body, dict):
+                outcome = "invalid_response"
+                raise SchedulingAPIError(
+                    response.status_code,
+                    {
+                        "code": "invalid_response",
+                        "message": "Scheduling API returned an unexpected response.",
+                    },
+                )
 
-        # Treat any HTTP 2xx response as success.
-        if not 200 <= response.status_code < 300:
-            raise SchedulingAPIError(
-                response.status_code,
-                body,
-            )
+            outcome = "ok"
+            return body
+        finally:
+            _log_api(method, path, status, outcome, started)
 
-        if not isinstance(body, dict):
-            raise SchedulingAPIError(
-                response.status_code,
-                {
-                    "code": "invalid_response",
-                    "message": "Scheduling API returned an unexpected response.",
-                },
-            )
 
-        return body
+def _log_api(method, path, status, outcome, started):
+    """Log the call shape and result, never the request or patient payload."""
+    logger.info(json.dumps({
+        "api_operation": "{} {}".format(method, _public_path(path)),
+        "status": status,
+        "outcome": outcome,
+        "latency_ms": round((time.perf_counter() - started) * 1000, 1),
+    }, separators=(",", ":")))
+
+
+def _public_path(path):
+    parts = [part for part in path.split("/") if part]
+    if len(parts) == 3 and parts[0] == "patients" and parts[2] == "appointments":
+        return "/patients/{patientId}/appointments"
+    return path
+
+
+def _error_code(body):
+    if isinstance(body, dict) and isinstance(body.get("code"), str):
+        return body["code"]
+    return None
+
+
+def _configure_logging():
+    parent = logging.getLogger("scheduling")
+    if parent.handlers:
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    parent.addHandler(handler)
+    parent.setLevel(logging.INFO)
+    parent.propagate = False
+
+
+_configure_logging()
 
 
 def _omit_none(fields: Mapping[str, Any]) -> dict:
