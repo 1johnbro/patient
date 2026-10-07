@@ -7,6 +7,7 @@ choose a workflow, book, hand off, or keep conversation state.
 import json
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -28,7 +29,6 @@ INTENTS = (
 SPECIALTIES = ("primary_care", "dermatology")
 LOCATIONS = ("downtown", "uptown", "lakeside")
 
-_DOB = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _ZIP = re.compile(r"^\d{5}$")
 _PHONE_CHARS = re.compile(r"^[\d\s().\-]+$")
 
@@ -41,7 +41,7 @@ Return this object:
   "specialty": "primary_care" | "dermatology" | null,
   "location": "downtown" | "uptown" | "lakeside" | null,
   "phone": string | null,
-  "dob": "YYYY-MM-DD" | null,
+  "dob": string | null,
   "zip_code": string | null,
   "slot_number": number | null,
   "confirmed": true | false | null
@@ -68,6 +68,7 @@ Examples:
 "I need to see a regular doctor downtown" -> {"intent":"book_appointment","specialty":"primary_care","location":"downtown","phone":null,"dob":null,"zip_code":null,"slot_number":null,"confirmed":null}
 "I want to speak to a person" -> {"intent":"human_request","specialty":null,"location":null,"phone":null,"dob":null,"zip_code":null,"slot_number":null,"confirmed":null}
 phone is only a number the user stated. Keep every digit they said. Do not add or drop digits.
+dob is the date-of-birth text the user stated. Copy that text. Do not reformat it or fill in a missing year, month, or day.
 zip_code is the 5-digit ZIP the user stated. It distinguishes patients who share a name, phone, and date of birth.
 slot_number is the option the user picked, as a number: "the first one" is 1, "slot 2" is 2. It is not an internal slot id. Use null if they did not pick one.
 confirmed is true only when this message explicitly agrees to book, false when it explicitly declines, otherwise null.
@@ -132,8 +133,7 @@ def _normalize(raw: dict) -> dict:
 
     phone = _phone(raw.get("phone"))
 
-    dob = raw.get("dob")
-    dob = dob if isinstance(dob, str) and _DOB.match(dob) else None
+    dob = _normalize_dob(raw.get("dob"))
 
     zip_code = raw.get("zip_code")
     if isinstance(zip_code, int):
@@ -170,6 +170,35 @@ def _blank(intent: str) -> dict:
         "slot_number": None,
         "confirmed": None,
     }
+
+
+def _normalize_dob(value):
+    """Return YYYY-MM-DD, or None when the text is incomplete, invalid, or ambiguous."""
+    if not isinstance(value, str):
+        return None
+    text = " ".join(value.split())
+    if not text:
+        return None
+
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+        return _one_date(text, ("%Y-%m-%d",))
+    if re.fullmatch(r"\d{1,2}/\d{1,2}/\d{4}", text):
+        return _one_date(text, ("%m/%d/%Y",))
+    if re.fullmatch(r"\d{1,2}-\d{1,2}-\d{4}", text):
+        return _one_date(text, ("%m-%d-%Y",))
+    return _one_date(text, ("%B %d %Y", "%B %d, %Y", "%b %d %Y", "%b %d, %Y"))
+
+
+def _one_date(text, formats):
+    found = set()
+    for fmt in formats:
+        try:
+            found.add(datetime.strptime(text, fmt).date())
+        except ValueError:
+            continue
+    if len(found) != 1:
+        return None
+    return found.pop().isoformat()
 
 
 def _phone(value):

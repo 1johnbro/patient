@@ -73,7 +73,19 @@ class Orchestrator:
         if not isinstance(understood, dict):
             return "I couldn't interpret that message. Nothing was booked."
 
+        # Exact yes/no only counts after a real slot is already selected.
+        # The model's confirmed flag still applies to every other reply.
+        explicit = _explicit_confirmation(text) if self.selected_slot is not None else None
+        held_slot = self.selected_slot
         self._apply(understood)
+        if explicit is True:
+            self.turn_confirmed = True
+            self.declined = False
+            self.selected_slot = held_slot
+        elif explicit is False:
+            self.turn_confirmed = False
+            self.declined = True
+            self.selected_slot = None
         turn_intent = understood.get("intent")
 
         if turn_intent in SPECIAL_INTENTS:
@@ -421,6 +433,33 @@ class Orchestrator:
         self.patient = None
         self.candidates = None
         self._clear_slots()
+
+
+_CONFIRM_YES = frozenset({
+    "yes",
+    "yes please",
+    "confirm",
+    "confirm it",
+    "book it",
+    "yes book it",
+    "yes, book it",
+})
+_CONFIRM_NO = frozenset({
+    "no",
+    "no thanks",
+    "don't book it",
+    "do not book it",
+    "cancel that",
+})
+
+
+def _explicit_confirmation(text):
+    normalized = " ".join((text or "").strip().lower().split())
+    if normalized in _CONFIRM_YES:
+        return True
+    if normalized in _CONFIRM_NO:
+        return False
+    return None
 
 
 def _words(value):
