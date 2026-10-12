@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scheduling assistant</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Scheduling assistant</h1>
+      <p>Ask about providers or book a visit. Nothing is booked until you confirm.</p>
+    </header>
+
+    <section id="messages" aria-live="polite"></section>
+
+    <p id="error" role="alert" hidden></p>
+
+    <section id="confirmation" hidden>
+      <h2>Confirm this appointment</h2>
+      <dl>
+        <div>
+          <dt>Provider</dt>
+          <dd id="confirm-provider"></dd>
+        </div>
+        <div>
+          <dt>Date</dt>
+          <dd id="confirm-date"></dd>
+        </div>
+        <div>
+          <dt>Time</dt>
+          <dd id="confirm-time"></dd>
+        </div>
+        <div>
+          <dt>Place</dt>
+          <dd id="confirm-place"></dd>
+        </div>
+      </dl>
+      <div class="row">
+        <button type="button" id="confirm-yes">Yes, book it</button>
+        <button type="button" id="confirm-no">No</button>
+      </div>
+    </section>
+
+    <div id="choices" class="row"></div>
+
+    <form id="composer">
+      <label class="sr" for="text">Message</label>
+      <input id="text" name="text" autocomplete="off" placeholder="Type a message">
+      <button type="submit" id="send">Send</button>
+    </form>
+    <p id="status" aria-live="polite"></p>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
